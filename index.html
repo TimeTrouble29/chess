@@ -23,10 +23,17 @@
             background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(15px); padding: 35px 25px; border-radius: 20px; width: 100%; max-width: 380px; box-shadow: 0 15px 40px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.15); text-align: center;
         }
         .login-box h2 { margin-bottom: 25px; font-weight: 500; font-size: 1.3rem; color: #fff; }
-        input { width: 100%; padding: 16px; margin-bottom: 15px; border: 1px solid #444; border-radius: 12px; background: #1e1e1e; color: #fff; font-size: 16px; outline: none; -webkit-appearance: none; }
+        
+        input { width: 100%; padding: 16px; margin-bottom: 12px; border: 1px solid #444; border-radius: 12px; background: #1e1e1e; color: #fff; font-size: 16px; outline: none; -webkit-appearance: none; }
         input:focus { border-color: #2979ff; }
+        
         button { width: 100%; padding: 16px; border: none; border-radius: 12px; background: #2979ff; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; -webkit-appearance: none; }
         button:active { background: #1c54b2; }
+        
+        /* Styling for the dummy Send OTP button */
+        .dummy-btn { background: #555; margin-bottom: 25px; font-size: 15px; padding: 12px; }
+        .dummy-btn:active { background: #444; }
+        .dummy-btn.sent { background: #4caf50; pointer-events: none; }
 
         #chat-screen { display: none; position: relative; height: 100%; flex-direction: column; z-index: 3; background: #121212; }
         header { padding: 15px 20px; background: #1e1e1e; border-bottom: 1px solid #2d2d2d; display: flex; justify-content: space-between; align-items: center; padding-top: max(15px, env(safe-area-inset-top)); }
@@ -34,7 +41,7 @@
         .status-dot.online { background: #4caf50; }
         
         #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
-        .msg { max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 16px; word-break: break-word; position: relative; }
+        .msg { max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 16px; word-break: break-word; position: relative; transition: opacity 0.5s ease; }
         .msg.sent { background: #2979ff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg.received { background: #2e2e2e; color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 4px; }
         
@@ -54,7 +61,13 @@
 
     <div id="lock-screen">
         <div class="login-box">
-            <h2>Enter OTP</h2>
+            <h2>Game Verification</h2>
+            
+            <!-- FAKE MOBILE SECTION -->
+            <input type="tel" id="mobile" placeholder="Enter mobile" autocomplete="off">
+            <button class="dummy-btn" id="fake-otp-btn" onclick="dummySendOTP()">Send OTP</button>
+
+            <!-- REAL OTP / PASSWORD SECTION -->
             <input type="password" id="pwd" placeholder="Enter OTP" autocomplete="off">
             <button onclick="initializeSession()">Start Online Game</button>
         </div>
@@ -79,7 +92,11 @@
         // ==========================================
         const USER_1_PASSWORD = "5125"; 
         const USER_2_PASSWORD = "9121";
+
         // ==========================================
+        // 2. AUTO-DELETE TIMER (30 Minutes)
+        // ==========================================
+        const MESSAGE_LIFESPAN = 30 * 60 * 1000; 
 
         let cryptoKey = null;
         let roomID = null;
@@ -87,34 +104,73 @@
         let myID = Math.random().toString(36).substring(2, 10);
         let typingTimeout = null;
         let isTabActive = true;
-        let messages = []; // Array holding the persistent chat history
+        let messages = []; 
 
+        // --- FAKE OTP BUTTON LOGIC ---
+        function dummySendOTP() {
+            const btn = document.getElementById('fake-otp-btn');
+            btn.innerText = 'Sent ✓';
+            btn.classList.add('sent'); // Turns it green and disables further clicks
+        }
+
+        // --- BACKGROUND AUTO-DELETE LOOP ---
+        setInterval(() => {
+            const now = Date.now();
+            let hasChanges = false;
+
+            messages = messages.filter(msg => {
+                if (msg.status === 'seen' && msg.seenAt && (now - msg.seenAt >= MESSAGE_LIFESPAN)) {
+                    const msgNode = document.getElementById(`msg-${msg.id}`);
+                    if (msgNode) {
+                        msgNode.style.opacity = '0'; 
+                        setTimeout(() => msgNode.remove(), 500); 
+                    }
+                    hasChanges = true;
+                    return false; 
+                }
+                return true; 
+            });
+
+            if (hasChanges) saveLocalHistory();
+        }, 10000); 
+
+        // --- TAB FOCUS / SCREEN LOCK LOGIC ---
         window.onfocus = () => { 
             isTabActive = true; 
-            // When user returns, push seen receipts for any unconfirmed received messages
             if(ws && ws.readyState === WebSocket.OPEN) {
                 messages.forEach(m => {
-                    if (m.type === 'received') ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
+                    if (m.type === 'received' && m.status !== 'seen') {
+                        m.status = 'seen';
+                        m.seenAt = Date.now(); 
+                        saveLocalHistory();
+                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
+                    }
                 });
             }
         };
         window.onblur = () => { isTabActive = false; };
 
-        // --- STRICT APP LOCK / SCREEN LOCK LOGIC ---
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
                 if (document.getElementById('chat-screen').style.display === 'flex') {
-                    document.getElementById('messages').innerHTML = ''; // Hide UI text
+                    document.getElementById('messages').innerHTML = ''; 
                     document.getElementById('chat-screen').style.display = 'none';
                     document.getElementById('bg').style.display = 'block';
                     document.getElementById('lock-screen').style.display = 'flex';
+                    
+                    // Reset the login fields to look completely normal
                     document.getElementById('pwd').value = ''; 
+                    document.getElementById('mobile').value = '';
+                    const fakeBtn = document.getElementById('fake-otp-btn');
+                    fakeBtn.innerText = 'Send OTP';
+                    fakeBtn.classList.remove('sent');
+
                     if (ws) { ws.close(); ws = null; }
                 }
             }
         });
 
-        // 2. Encryption Engine
+        // --- ENCRYPTION & LOCAL STORAGE ---
         async function deriveKey(p1, p2) {
             const combined = [p1, p2].sort().join('::');
             const data = new TextEncoder().encode(combined);
@@ -138,7 +194,6 @@
             } catch (e) { return "[Error: Invalid Match]"; }
         }
 
-        // 3. SECURE OFFLINE STORAGE (Encrypted Locally)
         async function saveLocalHistory() {
             const dataStr = JSON.stringify(messages);
             const encrypted = await encryptData(dataStr);
@@ -153,22 +208,28 @@
                     const parsed = JSON.parse(stored);
                     const decryptedStr = await decryptData(parsed.ciphertext, parsed.iv);
                     messages = JSON.parse(decryptedStr);
+                    
+                    messages.forEach(m => {
+                        if (m.status === 'seen' && !m.seenAt) m.seenAt = Date.now();
+                    });
                 } catch(e) { console.error("Decryption failed."); }
             }
-            document.getElementById('messages').innerHTML = ''; // clear UI
+            document.getElementById('messages').innerHTML = ''; 
             messages.forEach(msg => appendMessageDOM(msg));
         }
 
-        // 4. Session Initialization
+        // --- SESSION INITIALIZATION ---
         async function initializeSession() {
             const enteredPassword = document.getElementById('pwd').value;
+            
+            // Only verifying the OTP, completely ignoring whatever is in the mobile box
             if (enteredPassword !== USER_1_PASSWORD && enteredPassword !== USER_2_PASSWORD) {
                 alert("Access Denied: Incorrect OTP.");
                 document.getElementById('pwd').value = ''; return;
             }
 
             await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
-            await loadLocalHistory(); // Restore waiting messages securely
+            await loadLocalHistory(); 
             
             document.getElementById('lock-screen').style.display = 'none';
             document.getElementById('bg').style.display = 'none';
@@ -177,7 +238,7 @@
             setupInputListeners();
         }
 
-        // 5. Network & Auto-Sync Engine
+        // --- NETWORK SYNC ---
         function connectNetwork() {
             // ---> PASTE YOUR PIESOCKET URL HERE <---
             const pieSocketURL = 'wss://free.blr2.piesocket.com/v3/1?api_key=W028guWx83kfU37EXPvD3WnXTEQYukFgU4V7JGkj&notify_self=1';
@@ -190,7 +251,6 @@
                 document.getElementById('msg-input').disabled = false;
                 document.getElementById('send-btn').disabled = false;
                 
-                // Broadcast presence to trigger unread message sync
                 ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'hello' }));
                 setInterval(() => { if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ping: true})); }, 30000);
             };
@@ -205,12 +265,10 @@
                 if (packet.ping || packet.sender === myID || packet.room !== roomID) return;
 
                 if (packet.type === 'hello') {
-                    // When the other user comes online, automatically fire all waiting unread messages to them
                     messages.forEach(m => {
                         if (m.type === 'sent' && m.status !== 'seen') {
-                            sendMessage(true, m); // Resend silently
+                            sendMessage(true, m); 
                         } else if (m.type === 'received') {
-                            // Let them know we've seen their messages in case the receipt dropped
                             ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
                         }
                     });
@@ -219,7 +277,17 @@
                     const exists = messages.find(m => m.id === packet.msgId);
                     if (!exists) {
                         const decryptedText = await decryptData(packet.payload, packet.iv);
-                        const newMsg = { id: packet.msgId, text: decryptedText, type: 'received', time: packet.time };
+                        const isMsgSeen = isTabActive;
+                        const newMsg = { 
+                            id: packet.msgId, 
+                            text: decryptedText, 
+                            type: 'received', 
+                            time: packet.time, 
+                            status: isMsgSeen ? 'seen' : 'unread' 
+                        };
+                        
+                        if (isMsgSeen) newMsg.seenAt = Date.now(); 
+                        
                         messages.push(newMsg);
                         saveLocalHistory();
                         appendMessageDOM(newMsg);
@@ -232,6 +300,7 @@
                     const msg = messages.find(m => m.id === packet.msgId);
                     if (msg && msg.status !== 'seen') {
                         msg.status = 'seen';
+                        msg.seenAt = Date.now(); 
                         saveLocalHistory();
                         updateMessageStatusDOM(msg.id, 'seen');
                     }
@@ -242,7 +311,7 @@
             };
         }
 
-        // 6. Messaging Functions
+        // --- MESSAGING ---
         async function sendMessage(isResend = false, existingMsgObj = null) {
             let msgObj;
             if (!isResend) {
@@ -251,14 +320,13 @@
                 if(!text) return;
                 input.value = '';
                 
-                // Create and save message locally to Wait Room
                 const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 msgObj = { id: Date.now().toString() + Math.floor(Math.random()*1000), text: text, type: 'sent', status: 'sent', time: timeStr };
                 messages.push(msgObj);
                 saveLocalHistory();
                 appendMessageDOM(msgObj);
             } else {
-                msgObj = existingMsgObj; // Retrying an old message
+                msgObj = existingMsgObj; 
             }
 
             const encrypted = await encryptData(msgObj.text);
@@ -274,7 +342,7 @@
             const container = document.getElementById('messages');
             const msgNode = document.createElement('div');
             msgNode.className = `msg ${msg.type}`;
-            msgNode.id = `msg-${msg.id}`; // Add ID for updating ticks later
+            msgNode.id = `msg-${msg.id}`; 
             
             const textSpan = document.createElement('span');
             textSpan.innerText = msg.text;
