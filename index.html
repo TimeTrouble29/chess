@@ -190,6 +190,9 @@
     </div>
 
     <script>
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
         const USER_1_PASSWORD = "160824"; 
         const USER_2_PASSWORD = "290624";
 
@@ -331,7 +334,7 @@
                     messages = JSON.parse(decryptedStr);
                 } catch(e) { console.error("Decryption failed."); }
             }
-            renderMessages(); // Uses history pagination
+            renderMessages();
         }
 
         function renderMessages() {
@@ -382,6 +385,11 @@
             unreadCount = 0;
             updateLoginBadge();
             
+            // FIX 1: Disconnect old ghosts so you don't get duplicates when unlocking!
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
             connectNetwork();
             setupInputListeners();
         }
@@ -418,13 +426,16 @@
                     });
                 } 
                 else if (packet.type === 'chat') {
-                    let existing = messages.find(m => m.id === packet.msgId);
                     const decryptedText = await decryptData(packet.payload, packet.iv);
+                    
+                    // FIX 2: Check for existing AFTER decryption to stop split-second race conditions
+                    let existing = messages.find(m => m.id === packet.msgId);
+                    
                     const isChatVisible = document.getElementById('chat-screen').style.display === 'flex';
                     const isMsgSeen = isTabActive && isChatVisible;
 
                     if (existing) {
-                        // FIX: Only mark as edited if the sender explicitly pushed an edit
+                        // Strict check to ensure it was actually an intentional edit
                         if (packet.isEdit) {
                             existing.text = decryptedText;
                             existing.edited = true;
@@ -444,7 +455,13 @@
                         }
                         messages.push(newMsg);
                         saveLocalHistory();
-                        appendMessageDOM(newMsg); // Append directly to UI
+                        
+                        // Prevent UI clutter if today filter is on
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        if (showAllMessages || newMsg.timestamp >= today.getTime()) {
+                            appendMessageDOM(newMsg); 
+                        }
                     }
                     if(isChatVisible && isTabActive) {
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: packet.msgId }));
@@ -724,7 +741,7 @@
                 room: roomID, sender: myID, type: type, msgId: msgObj.id, 
                 payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time,
                 replyTo: msgObj.replyTo, timestamp: msgObj.timestamp,
-                isEdit: msgObj.edited || false // Strict flag for edits
+                isEdit: msgObj.edited || false
             };
             ws.send(JSON.stringify(payload));
             ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
@@ -736,7 +753,6 @@
             msgNode.className = `msg ${msg.type}`;
             msgNode.id = `msg-${msg.id}`; 
             
-            // --- UPDATED Click vs Long-Press Logic ---
             let pressTimer;
             let isLongPress = false;
 
@@ -744,8 +760,8 @@
                 isLongPress = false;
                 pressTimer = setTimeout(() => {
                     isLongPress = true;
-                    msgNode.classList.toggle('show-time'); // Long press shows/hides time
-                }, 500); // 0.5 seconds for long press
+                    msgNode.classList.toggle('show-time'); // Long press toggles time
+                }, 500); 
             };
             const endPress = () => clearTimeout(pressTimer);
 
@@ -755,7 +771,7 @@
             msgNode.onmouseup = endPress;
 
             msgNode.onclick = () => {
-                if (!isLongPress) openActionModal(msg); // Single click opens context menu
+                if (!isLongPress) openActionModal(msg); // Single click opens menu
             };
 
             let innerHTML = '';
@@ -822,20 +838,16 @@
             const isMine = (msg.type === 'sent');
             const within30Secs = (Date.now() - msg.timestamp <= 30000);
 
-            // Hide reply if deleted
             if (msg.deleted) replyBtn.style.display = 'none';
             else replyBtn.style.display = 'block';
 
             if (isMine && within30Secs && !msg.deleted) {
-                // Sent message (within 30s)
                 editBtn.style.display = 'block';
                 delBtn.style.display = 'block';
             } else if (isMine && !msg.deleted) {
-                // Sent message (older than 30s)
                 editBtn.style.display = 'none';
                 delBtn.style.display = 'block'; 
             } else {
-                // Received message (left side)
                 editBtn.style.display = 'none';
                 delBtn.style.display = 'none';
             }
