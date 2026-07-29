@@ -61,22 +61,22 @@
         
         #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
         
-        .msg { max-width: 75%; padding: 8px 12px; border-radius: 14px; font-size: 14px; word-break: break-word; position: relative; transition: opacity 0.5s ease; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+        .msg { max-width: 75%; padding: 8px 12px; border-radius: 14px; font-size: 14px; word-break: break-word; position: relative; transition: opacity 0.5s ease; cursor: pointer; display: flex; flex-direction: column; gap: 2px; user-select: none; -webkit-user-select: none; }
         .msg.sent { background: #2979ff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg.received { background: #2e2e2e; color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 4px; }
         
-        .msg-content-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; width: 100%; }
+        .msg-content-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; width: 100%; pointer-events: none; }
         .msg.received .msg-content-row { justify-content: flex-start; }
 
-        .text-body { flex: 1; }
+        .text-body { flex: 1; pointer-events: none; }
         
-        .msg-time { font-size: 10px; color: rgba(255,255,255,0.6); display: none; margin-top: 2px; text-align: right; }
+        .msg-time { font-size: 10px; color: rgba(255,255,255,0.6); display: none; margin-top: 2px; text-align: right; pointer-events: none; }
         .msg.show-time .msg-time { display: block; }
 
-        .status-tick { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: bold; white-space: nowrap; vertical-align: baseline; }
+        .status-tick { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: bold; white-space: nowrap; vertical-align: baseline; pointer-events: none; }
         .status-tick.seen { color: #81c784; }
 
-        .reply-preview { background: rgba(0,0,0,0.2); border-left: 3px solid #fff; padding: 3px 6px; border-radius: 4px; font-size: 12px; margin-bottom: 4px; opacity: 0.85; }
+        .reply-preview { background: rgba(0,0,0,0.2); border-left: 3px solid #fff; padding: 3px 6px; border-radius: 4px; font-size: 12px; margin-bottom: 4px; opacity: 0.85; pointer-events: none; }
 
         #reply-bar { display: none; background: #1a1a1a; padding: 8px 15px; border-top: 1px solid #333; align-items: center; justify-content: space-between; font-size: 13px; color: #aaa; }
         #reply-bar span { color: #fff; font-weight: 500; }
@@ -103,6 +103,9 @@
         
         .btn-accept { background: #4caf50; color: #fff; }
         .btn-reject { background: #f44336; color: #fff; }
+        
+        .btn-mute { background: #333; color: #fff; border: 1px solid #555; }
+        .btn-mute.active { background: #ff9800; border-color: #ff9800; color: #fff; }
         
         .btn-speaker { background: #333; color: #fff; border: 1px solid #555; }
         .btn-speaker.active { background: #2979ff; border-color: #2979ff; }
@@ -167,21 +170,21 @@
             <button class="btn-reject" onclick="endCall()" title="Reject">✖</button>
         </div>
 
-        <!-- Active Call Actions (Speaker / Disconnect) -->
+        <!-- Active Call Actions (Mute / Speaker / Disconnect) -->
         <div class="call-actions" id="active-actions" style="display: none;">
+            <button id="mute-btn" class="btn-mute" onclick="toggleMute()" title="Mute">🎤</button>
             <button id="speaker-btn" class="btn-speaker" onclick="toggleSpeaker()" title="Speaker">🔊</button>
             <button class="btn-end" onclick="endCall()" title="Disconnect">📞</button>
         </div>
 
-        <!-- WebRTC Audio Output -->
         <audio id="remote-audio" autoplay></audio>
     </div>
 
     <div id="action-modal" onclick="closeActionModal(event)">
         <div class="action-sheet" id="action-sheet-content">
-            <button onclick="triggerReplyFromMenu()">Reply</button>
+            <button id="menu-reply-btn" onclick="triggerReplyFromMenu()">Reply</button>
             <button id="menu-edit-btn" onclick="triggerEditFromMenu()" style="display:none;">Edit (within 30s)</button>
-            <button id="menu-del-btn" class="danger" onclick="triggerDeleteFromMenu()" style="display:none;">Delete (within 30s)</button>
+            <button id="menu-del-btn" class="danger" onclick="triggerDeleteFromMenu()" style="display:none;">Delete</button>
             <button onclick="closeActionModal()" style="border-bottom:none; color:#888;">Cancel</button>
         </div>
     </div>
@@ -208,6 +211,7 @@
         let pc = null;
         let localStream = null;
         let isSpeakerOn = false;
+        let isMuted = false;
         let pendingOffer = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -441,12 +445,10 @@
                 else if (packet.type === 'call-answer') {
                     if (pc) await pc.setRemoteDescription(new RTCSessionDescription(packet.answer));
                     
-                    // CALLER SIDE: Connected, show active buttons
                     document.getElementById('call-status-text').innerText = "Connected";
                     document.getElementById('incoming-actions').style.display = 'none';
                     document.getElementById('active-actions').style.display = 'flex';
                     
-                    // Trigger Default Earpiece Check on Connection
                     setDefaultAudioOutput(); 
                 }
                 else if (packet.type === 'ice-candidate') {
@@ -465,7 +467,6 @@
         async function startCall() {
             document.getElementById('call-status-text').innerText = "Calling...";
             
-            // Show Active Action buttons instantly for the Caller so they can Hang Up
             document.getElementById('incoming-actions').style.display = 'none';
             document.getElementById('active-actions').style.display = 'flex';
             document.getElementById('call-overlay').style.display = 'flex';
@@ -504,7 +505,6 @@
             pendingOffer = offer;
             document.getElementById('call-status-text').innerText = "Incoming Call...";
             
-            // Show Accept/Reject buttons for Receiver
             document.getElementById('incoming-actions').style.display = 'flex';
             document.getElementById('active-actions').style.display = 'none';
             document.getElementById('call-overlay').style.display = 'flex';
@@ -540,12 +540,10 @@
                     ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-answer', answer: answer }));
                 }
                 
-                // RECEIVER SIDE: Connected, show active buttons
                 document.getElementById('call-status-text').innerText = "Connected";
                 document.getElementById('incoming-actions').style.display = 'none';
                 document.getElementById('active-actions').style.display = 'flex';
                 
-                // Trigger Default Earpiece Check on Connection
                 setDefaultAudioOutput();
 
             } catch (err) {
@@ -553,19 +551,36 @@
             }
         }
 
-        // Helper function to force Earpiece Default on compatible Androids/Desktops
+        // Toggle Mute Feature
+        function toggleMute() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                isMuted = !isMuted;
+                audioTrack.enabled = !isMuted; // Toggle track transmission
+                
+                const btn = document.getElementById('mute-btn');
+                if (isMuted) {
+                    btn.classList.add('active');
+                    btn.innerText = '🔇';
+                } else {
+                    btn.classList.remove('active');
+                    btn.innerText = '🎤';
+                }
+            }
+        }
+
         async function setDefaultAudioOutput() {
             isSpeakerOn = false;
             document.getElementById('speaker-btn').classList.remove('active');
             
             const audioElem = document.getElementById('remote-audio');
-            if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return; // Browser doesn't support manual routing
+            if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return; 
 
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
                 
-                // Find earpiece/handset if exposed by the browser
                 const earpiece = audioOutputs.find(d => 
                     d.label.toLowerCase().includes('earpiece') || 
                     d.label.toLowerCase().includes('handset')
@@ -574,7 +589,7 @@
                 if (earpiece) {
                     await audioElem.setSinkId(earpiece.deviceId);
                 } else {
-                    await audioElem.setSinkId('default'); // Usually defaults to earpiece on strict communication profiles
+                    await audioElem.setSinkId('default'); 
                 }
             } catch (err) { console.log("Audio routing blocked by browser."); }
         }
@@ -584,11 +599,9 @@
             const audioElem = document.getElementById('remote-audio');
             const btn = document.getElementById('speaker-btn');
             
-            // Visually toggle button
             if (isSpeakerOn) btn.classList.add('active');
             else btn.classList.remove('active');
             
-            // Attempt to route hardware audio if browser permits
             if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return;
 
             try {
@@ -627,8 +640,16 @@
                 pc = null;
             }
             pendingOffer = null;
+            
+            // Reset UI states
             isSpeakerOn = false;
             document.getElementById('speaker-btn').classList.remove('active');
+            
+            isMuted = false;
+            const muteBtn = document.getElementById('mute-btn');
+            muteBtn.classList.remove('active');
+            muteBtn.innerText = '🎤';
+            
             document.getElementById('call-overlay').style.display = 'none';
             document.getElementById('remote-audio').srcObject = null;
         }
@@ -685,13 +706,27 @@
             msgNode.className = `msg ${msg.type}`;
             msgNode.id = `msg-${msg.id}`; 
             
-            msgNode.onclick = () => { msgNode.classList.toggle('show-time'); };
-            
+            // --- Click vs Long-Press Logic ---
             let pressTimer;
-            msgNode.ontouchstart = () => { pressTimer = setTimeout(() => openActionModal(msg), 500); };
-            msgNode.ontouchend = () => { clearTimeout(pressTimer); };
-            msgNode.onmousedown = () => { pressTimer = setTimeout(() => openActionModal(msg), 500); };
-            msgNode.onmouseup = () => { clearTimeout(pressTimer); };
+            let isLongPress = false;
+
+            const startPress = () => {
+                isLongPress = false;
+                pressTimer = setTimeout(() => {
+                    isLongPress = true;
+                    msgNode.classList.toggle('show-time'); // Long press shows time
+                }, 500);
+            };
+            const endPress = () => clearTimeout(pressTimer);
+
+            msgNode.ontouchstart = startPress;
+            msgNode.ontouchend = endPress;
+            msgNode.onmousedown = startPress;
+            msgNode.onmouseup = endPress;
+
+            msgNode.onclick = () => {
+                if (!isLongPress) openActionModal(msg); // Single click opens menu
+            };
 
             let innerHTML = '';
             
@@ -749,19 +784,29 @@
         function openActionModal(msg) {
             selectedMsgForMenu = msg;
             const modal = document.getElementById('action-modal');
+            
+            const replyBtn = document.getElementById('menu-reply-btn');
             const editBtn = document.getElementById('menu-edit-btn');
             const delBtn = document.getElementById('menu-del-btn');
             
             const isMine = (msg.type === 'sent');
             const within30Secs = (Date.now() - msg.timestamp <= 30000);
 
+            // Left side (Received) vs Right side (Sent) Logic
+            if (msg.deleted) {
+                replyBtn.style.display = 'none';
+            } else {
+                replyBtn.style.display = 'block';
+            }
+
             if (isMine && within30Secs && !msg.deleted) {
                 editBtn.style.display = 'block';
                 delBtn.style.display = 'block';
             } else if (isMine && !msg.deleted) {
                 editBtn.style.display = 'none';
-                delBtn.style.display = 'block'; 
+                delBtn.style.display = 'block'; // Can always delete own message locally/globally
             } else {
+                // Not mine (Left side received message)
                 editBtn.style.display = 'none';
                 delBtn.style.display = 'none';
             }
