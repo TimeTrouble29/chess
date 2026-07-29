@@ -190,8 +190,8 @@
     </div>
 
     <script>
-        const USER_1_PASSWORD = "290624"; 
-        const USER_2_PASSWORD = "160824";
+        const USER_1_PASSWORD = "160824"; 
+        const USER_2_PASSWORD = "290624";
 
         let cryptoKey = null;
         let roomID = null;
@@ -206,6 +206,7 @@
         let replyingToId = null;
         let editingMsgId = null;
         let selectedMsgForMenu = null;
+        let showAllMessages = false;
 
         // WebRTC Call Variables
         let pc = null;
@@ -330,8 +331,35 @@
                     messages = JSON.parse(decryptedStr);
                 } catch(e) { console.error("Decryption failed."); }
             }
-            document.getElementById('messages').innerHTML = ''; 
-            messages.forEach(msg => appendMessageDOM(msg));
+            renderMessages(); // Uses history pagination
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('messages');
+            container.innerHTML = ''; 
+            
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const todayMs = today.getTime();
+
+            const olderMsgs = messages.filter(m => m.timestamp < todayMs);
+            const todayMsgs = messages.filter(m => m.timestamp >= todayMs);
+
+            if (!showAllMessages && olderMsgs.length > 0) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.textAlign = 'center';
+                btnContainer.style.margin = '10px 0';
+                btnContainer.innerHTML = `<button onclick="loadOlderMessages()" style="background:#2e2e2e; color:#bbb; font-size:12px; padding:6px 14px; border-radius:12px; border:1px solid #444; cursor:pointer;">Load ${olderMsgs.length} older messages</button>`;
+                container.appendChild(btnContainer);
+            }
+
+            const msgsToShow = showAllMessages ? messages : todayMsgs;
+            msgsToShow.forEach(msg => appendMessageDOM(msg));
+        }
+
+        function loadOlderMessages() {
+            showAllMessages = true;
+            renderMessages();
         }
 
         async function initializeSession() {
@@ -343,6 +371,7 @@
 
             initAudio(); 
             isTabActive = true;
+            showAllMessages = false;
             await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
             await loadLocalHistory(); 
             
@@ -395,10 +424,13 @@
                     const isMsgSeen = isTabActive && isChatVisible;
 
                     if (existing) {
-                        existing.text = decryptedText;
-                        existing.edited = true;
-                        updateMessageDOM(existing);
-                        saveLocalHistory();
+                        // FIX: Only mark as edited if the sender explicitly pushed an edit
+                        if (packet.isEdit) {
+                            existing.text = decryptedText;
+                            existing.edited = true;
+                            updateMessageDOM(existing);
+                            saveLocalHistory();
+                        }
                     } else {
                         const newMsg = { 
                             id: packet.msgId, text: decryptedText, type: 'received', 
@@ -412,7 +444,7 @@
                         }
                         messages.push(newMsg);
                         saveLocalHistory();
-                        appendMessageDOM(newMsg);
+                        appendMessageDOM(newMsg); // Append directly to UI
                     }
                     if(isChatVisible && isTabActive) {
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: packet.msgId }));
@@ -551,13 +583,12 @@
             }
         }
 
-        // Toggle Mute Feature
         function toggleMute() {
             if (!localStream) return;
             const audioTrack = localStream.getAudioTracks()[0];
             if (audioTrack) {
                 isMuted = !isMuted;
-                audioTrack.enabled = !isMuted; // Toggle track transmission
+                audioTrack.enabled = !isMuted;
                 
                 const btn = document.getElementById('mute-btn');
                 if (isMuted) {
@@ -641,7 +672,6 @@
             }
             pendingOffer = null;
             
-            // Reset UI states
             isSpeakerOn = false;
             document.getElementById('speaker-btn').classList.remove('active');
             
@@ -654,14 +684,13 @@
             document.getElementById('remote-audio').srcObject = null;
         }
 
-        // --- Keyboard Stays Open on Send ---
         function handleSendAction() {
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
             if(!text) return;
             
             input.value = ''; 
-            input.focus(); // Keep keyboard open
+            input.focus(); 
 
             if (editingMsgId) {
                 let msgObj = messages.find(m => m.id === editingMsgId);
@@ -694,7 +723,8 @@
             const payload = { 
                 room: roomID, sender: myID, type: type, msgId: msgObj.id, 
                 payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time,
-                replyTo: msgObj.replyTo, timestamp: msgObj.timestamp
+                replyTo: msgObj.replyTo, timestamp: msgObj.timestamp,
+                isEdit: msgObj.edited || false // Strict flag for edits
             };
             ws.send(JSON.stringify(payload));
             ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
@@ -706,7 +736,7 @@
             msgNode.className = `msg ${msg.type}`;
             msgNode.id = `msg-${msg.id}`; 
             
-            // --- Click vs Long-Press Logic ---
+            // --- UPDATED Click vs Long-Press Logic ---
             let pressTimer;
             let isLongPress = false;
 
@@ -714,8 +744,8 @@
                 isLongPress = false;
                 pressTimer = setTimeout(() => {
                     isLongPress = true;
-                    msgNode.classList.toggle('show-time'); // Long press shows time
-                }, 500);
+                    msgNode.classList.toggle('show-time'); // Long press shows/hides time
+                }, 500); // 0.5 seconds for long press
             };
             const endPress = () => clearTimeout(pressTimer);
 
@@ -725,7 +755,7 @@
             msgNode.onmouseup = endPress;
 
             msgNode.onclick = () => {
-                if (!isLongPress) openActionModal(msg); // Single click opens menu
+                if (!isLongPress) openActionModal(msg); // Single click opens context menu
             };
 
             let innerHTML = '';
@@ -792,21 +822,20 @@
             const isMine = (msg.type === 'sent');
             const within30Secs = (Date.now() - msg.timestamp <= 30000);
 
-            // Left side (Received) vs Right side (Sent) Logic
-            if (msg.deleted) {
-                replyBtn.style.display = 'none';
-            } else {
-                replyBtn.style.display = 'block';
-            }
+            // Hide reply if deleted
+            if (msg.deleted) replyBtn.style.display = 'none';
+            else replyBtn.style.display = 'block';
 
             if (isMine && within30Secs && !msg.deleted) {
+                // Sent message (within 30s)
                 editBtn.style.display = 'block';
                 delBtn.style.display = 'block';
             } else if (isMine && !msg.deleted) {
+                // Sent message (older than 30s)
                 editBtn.style.display = 'none';
-                delBtn.style.display = 'block'; // Can always delete own message locally/globally
+                delBtn.style.display = 'block'; 
             } else {
-                // Not mine (Left side received message)
+                // Received message (left side)
                 editBtn.style.display = 'none';
                 delBtn.style.display = 'none';
             }
