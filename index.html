@@ -20,9 +20,22 @@
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2; padding: 20px;
         }
         .login-box {
+            position: relative;
             background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(15px); padding: 35px 25px; border-radius: 20px; width: 100%; max-width: 380px; box-shadow: 0 15px 40px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.15); text-align: center;
         }
-        .login-box h2 { margin-bottom: 25px; font-weight: 500; font-size: 1.3rem; color: #fff; }
+        
+        .online-indicator {
+            position: absolute; top: 18px; right: 20px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .online-indicator span { font-size: 12px; color: #aaa; }
+        .blue-dot {
+            background: #2979ff; color: white; font-size: 11px; font-weight: bold;
+            border-radius: 50%; width: 18px; height: 18px;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .login-box h2 { margin-top: 10px; margin-bottom: 25px; font-weight: 500; font-size: 1.3rem; color: #fff; }
         
         input { width: 100%; padding: 16px; margin-bottom: 12px; border: 1px solid #444; border-radius: 12px; background: #1e1e1e; color: #fff; font-size: 16px; outline: none; -webkit-appearance: none; }
         input:focus { border-color: #2979ff; }
@@ -30,7 +43,6 @@
         button { width: 100%; padding: 16px; border: none; border-radius: 12px; background: #2979ff; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; -webkit-appearance: none; }
         button:active { background: #1c54b2; }
         
-        /* Styling for the dummy Send OTP button */
         .dummy-btn { background: #555; margin-bottom: 25px; font-size: 15px; padding: 12px; }
         .dummy-btn:active { background: #444; }
         .dummy-btn.sent { background: #4caf50; pointer-events: none; }
@@ -40,19 +52,47 @@
         .status-dot { width: 10px; height: 10px; background: #555; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .status-dot.online { background: #4caf50; }
         
-        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
-        .msg { max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 16px; word-break: break-word; position: relative; transition: opacity 0.5s ease; }
+        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+        
+        /* Reduced message container size & layout */
+        .msg { max-width: 75%; padding: 8px 12px; border-radius: 14px; font-size: 14px; word-break: break-word; position: relative; transition: opacity 0.5s ease; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
         .msg.sent { background: #2979ff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg.received { background: #2e2e2e; color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 4px; }
         
-        .meta-info { font-size: 11px; margin-top: 5px; display: flex; justify-content: flex-end; gap: 5px; color: rgba(255,255,255,0.5); }
-        .status-tick { color: #ccc; margin-left: 2px; font-weight: bold; }
-        .status-tick.seen { color: #4caf50; }
+        .msg-content-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; width: 100%; }
+        .msg.received .msg-content-row { justify-content: flex-start; }
+
+        .text-body { flex: 1; }
+        
+        /* Time hidden by default, revealed on click */
+        .msg-time { font-size: 10px; color: rgba(255,255,255,0.6); display: none; margin-top: 2px; text-align: right; }
+        .msg.show-time .msg-time { display: block; }
+
+        /* Inline Ticks */
+        .status-tick { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: bold; white-space: nowrap; vertical-align: baseline; }
+        .status-tick.seen { color: #81c784; }
+
+        /* Reply quote preview inside message */
+        .reply-preview { background: rgba(0,0,0,0.2); border-left: 3px solid #fff; padding: 3px 6px; border-radius: 4px; font-size: 12px; margin-bottom: 4px; opacity: 0.85; }
+
+        /* Reply bar above footer */
+        #reply-bar { display: none; background: #1a1a1a; padding: 8px 15px; border-top: 1px solid #333; align-items: center; justify-content: space-between; font-size: 13px; color: #aaa; }
+        #reply-bar span { color: #fff; font-weight: 500; }
+        #reply-bar button { background: none; border: none; color: #aaa; font-size: 16px; cursor: pointer; width: auto; padding: 0 5px; }
+
         #typing-indicator { padding: 5px 15px; font-size: 13px; color: #888; height: 25px; font-style: italic; }
 
-        footer { padding: 10px 15px; background: #1e1e1e; display: flex; gap: 10px; border-top: 1px solid #2d2d2d; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-        footer input { margin-bottom: 0; flex: 1; border-radius: 20px; padding: 12px 16px; }
-        footer button { width: auto; padding: 0 24px; border-radius: 20px; }
+        footer { padding: 10px 15px; background: #1e1e1e; display: flex; flex-direction: column; border-top: 1px solid #2d2d2d; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+        .footer-row { display: flex; gap: 10px; width: 100%; }
+        footer input { margin-bottom: 0; flex: 1; border-radius: 20px; padding: 10px 14px; font-size: 14px; }
+        footer button { width: auto; padding: 0 20px; border-radius: 20px; font-size: 14px; }
+
+        /* Context menu overlay for edit/delete/reply */
+        #action-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10; justify-content: center; align-items: center; }
+        .action-sheet { background: #222; border-radius: 14px; width: 85%; max-width: 300px; overflow: hidden; border: 1px solid #444; display: flex; flex-direction: column; }
+        .action-sheet button { background: none; border: none; padding: 15px; color: #fff; font-size: 15px; text-align: center; border-bottom: 1px solid #333; border-radius: 0; width: 100%; }
+        .action-sheet button:active { background: #333; }
+        .action-sheet button.danger { color: #ff5252; }
     </style>
 </head>
 <body>
@@ -61,13 +101,16 @@
 
     <div id="lock-screen">
         <div class="login-box">
+            <div class="online-indicator">
+                <span>Users online</span>
+                <div id="login-badge" class="blue-dot"></div>
+            </div>
+
             <h2>Game Verification</h2>
             
-            <!-- FAKE MOBILE SECTION -->
             <input type="tel" id="mobile" placeholder="Enter mobile" autocomplete="off">
             <button class="dummy-btn" id="fake-otp-btn" onclick="dummySendOTP()">Send OTP</button>
 
-            <!-- REAL OTP / PASSWORD SECTION -->
             <input type="password" id="pwd" placeholder="Enter OTP" autocomplete="off">
             <button onclick="initializeSession()">Start Online Game</button>
         </div>
@@ -80,22 +123,33 @@
         </header>
         <div id="messages"></div>
         <div id="typing-indicator"></div>
+        
+        <div id="reply-bar">
+            <div>Replying to: <span id="reply-text-preview"></span></div>
+            <button onclick="cancelReply()">✕</button>
+        </div>
+
         <footer>
-            <input type="text" id="msg-input" placeholder="Message..." autocomplete="off" disabled>
-            <button id="send-btn" onclick="sendMessage(false)" disabled>Send</button>
+            <div class="footer-row">
+                <input type="text" id="msg-input" placeholder="Message..." autocomplete="off" disabled>
+                <button id="send-btn" onclick="handleSendAction()" disabled>Send</button>
+            </div>
         </footer>
     </div>
 
+    <!-- Action Sheet Modal for Edit / Delete / Reply -->
+    <div id="action-modal" onclick="closeActionModal(event)">
+        <div class="action-sheet" id="action-sheet-content">
+            <button onclick="triggerReplyFromMenu()">Reply</button>
+            <button id="menu-edit-btn" onclick="triggerEditFromMenu()" style="display:none;">Edit (within 30s)</button>
+            <button id="menu-del-btn" class="danger" onclick="triggerDeleteFromMenu()" style="display:none;">Delete (within 30s)</button>
+            <button onclick="closeActionModal()" style="border-bottom:none; color:#888;">Cancel</button>
+        </div>
+    </div>
+
     <script>
-        // ==========================================
-        // 1. HARDCODED PRE-FIXED PASSWORDS (USED AS OTPs)
-        // ==========================================
         const USER_1_PASSWORD = "5125"; 
         const USER_2_PASSWORD = "9121";
-
-        // ==========================================
-        // 2. AUTO-DELETE TIMER (30 Minutes)
-        // ==========================================
         const MESSAGE_LIFESPAN = 30 * 60 * 1000; 
 
         let cryptoKey = null;
@@ -105,19 +159,55 @@
         let typingTimeout = null;
         let isTabActive = true;
         let messages = []; 
+        let unreadCount = 0;
+        let listenersSetup = false;
+        
+        let replyingToId = null;
+        let editingMsgId = null;
+        let selectedMsgForMenu = null;
 
-        // --- FAKE OTP BUTTON LOGIC ---
+        function updateLoginBadge() {
+            const badge = document.getElementById('login-badge');
+            if (unreadCount > 0) {
+                badge.innerText = unreadCount;
+            } else {
+                badge.innerText = ''; 
+            }
+        }
+        updateLoginBadge();
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playNotificationSound() {
+            if (!audioCtx) return;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            oscillator.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
         function dummySendOTP() {
             const btn = document.getElementById('fake-otp-btn');
             btn.innerText = 'Sent ✓';
-            btn.classList.add('sent'); // Turns it green and disables further clicks
+            btn.classList.add('sent');
         }
 
-        // --- BACKGROUND AUTO-DELETE LOOP ---
         setInterval(() => {
             const now = Date.now();
             let hasChanges = false;
-
             messages = messages.filter(msg => {
                 if (msg.status === 'seen' && msg.seenAt && (now - msg.seenAt >= MESSAGE_LIFESPAN)) {
                     const msgNode = document.getElementById(`msg-${msg.id}`);
@@ -130,14 +220,15 @@
                 }
                 return true; 
             });
-
             if (hasChanges) saveLocalHistory();
         }, 10000); 
 
-        // --- TAB FOCUS / SCREEN LOCK LOGIC ---
         window.onfocus = () => { 
             isTabActive = true; 
-            if(ws && ws.readyState === WebSocket.OPEN) {
+            const isChatVisible = document.getElementById('chat-screen').style.display === 'flex';
+            if (isChatVisible && ws && ws.readyState === WebSocket.OPEN) {
+                unreadCount = 0;
+                updateLoginBadge();
                 messages.forEach(m => {
                     if (m.type === 'received' && m.status !== 'seen') {
                         m.status = 'seen';
@@ -157,20 +248,15 @@
                     document.getElementById('chat-screen').style.display = 'none';
                     document.getElementById('bg').style.display = 'block';
                     document.getElementById('lock-screen').style.display = 'flex';
-                    
-                    // Reset the login fields to look completely normal
                     document.getElementById('pwd').value = ''; 
                     document.getElementById('mobile').value = '';
                     const fakeBtn = document.getElementById('fake-otp-btn');
                     fakeBtn.innerText = 'Send OTP';
                     fakeBtn.classList.remove('sent');
-
-                    if (ws) { ws.close(); ws = null; }
                 }
             }
         });
 
-        // --- ENCRYPTION & LOCAL STORAGE ---
         async function deriveKey(p1, p2) {
             const combined = [p1, p2].sort().join('::');
             const data = new TextEncoder().encode(combined);
@@ -191,7 +277,7 @@
                 const ciphertext = new Uint8Array(atob(ciphertextB64).split('').map(c => c.charCodeAt(0)));
                 const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, ciphertext);
                 return new TextDecoder().decode(decrypted);
-            } catch (e) { return "[Error: Invalid Match]"; }
+            } catch (e) { return "[Error]"; }
         }
 
         async function saveLocalHistory() {
@@ -208,7 +294,6 @@
                     const parsed = JSON.parse(stored);
                     const decryptedStr = await decryptData(parsed.ciphertext, parsed.iv);
                     messages = JSON.parse(decryptedStr);
-                    
                     messages.forEach(m => {
                         if (m.status === 'seen' && !m.seenAt) m.seenAt = Date.now();
                     });
@@ -218,31 +303,43 @@
             messages.forEach(msg => appendMessageDOM(msg));
         }
 
-        // --- SESSION INITIALIZATION ---
         async function initializeSession() {
             const enteredPassword = document.getElementById('pwd').value;
-            
-            // Only verifying the OTP, completely ignoring whatever is in the mobile box
             if (enteredPassword !== USER_1_PASSWORD && enteredPassword !== USER_2_PASSWORD) {
                 alert("Access Denied: Incorrect OTP.");
                 document.getElementById('pwd').value = ''; return;
             }
 
+            initAudio(); 
             await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
             await loadLocalHistory(); 
             
             document.getElementById('lock-screen').style.display = 'none';
             document.getElementById('bg').style.display = 'none';
             document.getElementById('chat-screen').style.display = 'flex';
-            connectNetwork();
+            
+            unreadCount = 0;
+            updateLoginBadge();
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                connectNetwork();
+            } else {
+                messages.forEach(m => {
+                    if (m.type === 'received' && m.status !== 'seen') {
+                        m.status = 'seen';
+                        m.seenAt = Date.now();
+                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
+                    }
+                });
+                saveLocalHistory();
+                document.getElementById('msg-input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+            }
             setupInputListeners();
         }
 
-        // --- NETWORK SYNC ---
         function connectNetwork() {
-            // ---> PASTE YOUR PIESOCKET URL HERE <---
             const pieSocketURL = 'wss://free.blr2.piesocket.com/v3/1?api_key=W028guWx83kfU37EXPvD3WnXTEQYukFgU4V7JGkj&notify_self=1';
-            
             ws = new WebSocket(pieSocketURL);
 
             ws.onopen = () => {
@@ -250,7 +347,6 @@
                 document.getElementById('status-text').innerText = 'Game Node Online';
                 document.getElementById('msg-input').disabled = false;
                 document.getElementById('send-btn').disabled = false;
-                
                 ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'hello' }));
                 setInterval(() => { if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ping: true})); }, 30000);
             };
@@ -266,36 +362,54 @@
 
                 if (packet.type === 'hello') {
                     messages.forEach(m => {
-                        if (m.type === 'sent' && m.status !== 'seen') {
-                            sendMessage(true, m); 
-                        } else if (m.type === 'received') {
+                        if (m.type === 'sent' && m.status !== 'seen' && !m.deleted) {
+                            sendPayloadViaWS('chat', m); 
+                        } else if (m.type === 'received' && !m.deleted) {
                             ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
                         }
                     });
                 } 
                 else if (packet.type === 'chat') {
-                    const exists = messages.find(m => m.id === packet.msgId);
-                    if (!exists) {
-                        const decryptedText = await decryptData(packet.payload, packet.iv);
-                        const isMsgSeen = isTabActive;
+                    let existing = messages.find(m => m.id === packet.msgId);
+                    const decryptedText = await decryptData(packet.payload, packet.iv);
+                    const isChatVisible = document.getElementById('chat-screen').style.display === 'flex';
+                    const isMsgSeen = isTabActive && isChatVisible;
+
+                    if (existing) {
+                        existing.text = decryptedText;
+                        existing.edited = true;
+                        updateMessageDOM(existing);
+                        saveLocalHistory();
+                    } else {
                         const newMsg = { 
-                            id: packet.msgId, 
-                            text: decryptedText, 
-                            type: 'received', 
-                            time: packet.time, 
-                            status: isMsgSeen ? 'seen' : 'unread' 
+                            id: packet.msgId, text: decryptedText, type: 'received', 
+                            time: packet.time, status: isMsgSeen ? 'seen' : 'unread',
+                            replyTo: packet.replyTo || null, timestamp: packet.timestamp || Date.now()
                         };
-                        
-                        if (isMsgSeen) newMsg.seenAt = Date.now(); 
-                        
+                        if (isMsgSeen) {
+                            newMsg.seenAt = Date.now(); 
+                        } else {
+                            unreadCount++;
+                            updateLoginBadge();
+                            playNotificationSound();
+                        }
                         messages.push(newMsg);
                         saveLocalHistory();
                         appendMessageDOM(newMsg);
                     }
-                    if(isTabActive) {
+                    if(isChatVisible && isTabActive) {
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: packet.msgId }));
                     }
                 } 
+                else if (packet.type === 'delete') {
+                    let target = messages.find(m => m.id === packet.msgId);
+                    if (target) {
+                        target.deleted = true;
+                        target.text = "This message was deleted";
+                        updateMessageDOM(target);
+                        saveLocalHistory();
+                    }
+                }
                 else if (packet.type === 'seen') {
                     const msg = messages.find(m => m.id === packet.msgId);
                     if (msg && msg.status !== 'seen') {
@@ -311,31 +425,49 @@
             };
         }
 
-        // --- MESSAGING ---
-        async function sendMessage(isResend = false, existingMsgObj = null) {
-            let msgObj;
-            if (!isResend) {
-                const input = document.getElementById('msg-input');
-                const text = input.value.trim();
-                if(!text) return;
-                input.value = '';
-                
+        function handleSendAction() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if(!text) return;
+            input.value = '';
+
+            if (editingMsgId) {
+                // Execute Edit
+                let msgObj = messages.find(m => m.id === editingMsgId);
+                if (msgObj) {
+                    msgObj.text = text;
+                    msgObj.edited = true;
+                    saveLocalHistory();
+                    updateMessageDOM(msgObj);
+                    sendPayloadViaWS('chat', msgObj);
+                }
+                cancelEdit();
+            } else {
+                // Execute Send
                 const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                msgObj = { id: Date.now().toString() + Math.floor(Math.random()*1000), text: text, type: 'sent', status: 'sent', time: timeStr };
+                const msgObj = { 
+                    id: Date.now().toString() + Math.floor(Math.random()*1000), 
+                    text: text, type: 'sent', status: 'sent', time: timeStr,
+                    replyTo: replyingToId, timestamp: Date.now()
+                };
                 messages.push(msgObj);
                 saveLocalHistory();
                 appendMessageDOM(msgObj);
-            } else {
-                msgObj = existingMsgObj; 
+                sendPayloadViaWS('chat', msgObj);
+                cancelReply();
             }
+        }
 
+        async function sendPayloadViaWS(type, msgObj) {
+            if(!ws || ws.readyState !== WebSocket.OPEN) return;
             const encrypted = await encryptData(msgObj.text);
-            const payload = { room: roomID, sender: myID, type: 'chat', msgId: msgObj.id, payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time };
-
-            if(ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify(payload));
-                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
-            }
+            const payload = { 
+                room: roomID, sender: myID, type: type, msgId: msgObj.id, 
+                payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time,
+                replyTo: msgObj.replyTo, timestamp: msgObj.timestamp
+            };
+            ws.send(JSON.stringify(payload));
+            ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
         }
 
         function appendMessageDOM(msg) {
@@ -344,22 +476,57 @@
             msgNode.className = `msg ${msg.type}`;
             msgNode.id = `msg-${msg.id}`; 
             
-            const textSpan = document.createElement('span');
-            textSpan.innerText = msg.text;
-            msgNode.appendChild(textSpan);
+            // Click to toggle time visibility
+            msgNode.onclick = () => { msgNode.classList.toggle('show-time'); };
+            
+            // Long press / tap to open context action menu
+            let pressTimer;
+            msgNode.ontouchstart = () => { pressTimer = setTimeout(() => openActionModal(msg), 500); };
+            msgNode.ontouchend = () => { clearTimeout(pressTimer); };
+            msgNode.onmousedown = () => { pressTimer = setTimeout(() => openActionModal(msg), 500); };
+            msgNode.onmouseup = () => { clearTimeout(pressTimer); };
 
-            const metaDiv = document.createElement('div');
-            metaDiv.className = 'meta-info';
+            let innerHTML = '';
             
-            let tick = '';
-            if (msg.type === 'sent') {
-                tick = msg.status === 'seen' ? '<span class="status-tick seen">✓✓</span>' : '<span class="status-tick">✓</span>';
+            // Render Reply preview if applicable
+            if (msg.replyTo) {
+                let parentMsg = messages.find(m => m.id === msg.replyTo);
+                let previewText = parentMsg ? parentMsg.text : "Original message";
+                innerHTML += `<div class="reply-preview">↳ ${escapeHTML(previewText)}</div>`;
             }
-            
-            metaDiv.innerHTML = `<span>${msg.time}</span>${tick}`;
-            msgNode.appendChild(metaDiv);
+
+            let tickHTML = '';
+            if (msg.type === 'sent') {
+                let tickSymbol = msg.status === 'seen' ? '✓✓' : '✓';
+                let tickClass = msg.status === 'seen' ? 'status-tick seen' : 'status-tick';
+                tickHTML = `<span class="${tickClass}">${tickSymbol}</span>`;
+            }
+
+            let bodyText = msg.deleted ? `<i>${escapeHTML(msg.text)}</i>` : escapeHTML(msg.text);
+            if (msg.edited && !msg.deleted) bodyText += ` <span style="font-size:10px; opacity:0.6;">(edited)</span>`;
+
+            innerHTML += `
+                <div class="msg-content-row">
+                    <span class="text-body">${bodyText}</span>
+                    ${tickHTML}
+                </div>
+                <div class="msg-time">${msg.time}</div>
+            `;
+
+            msgNode.innerHTML = innerHTML;
             container.appendChild(msgNode);
             container.scrollTop = container.scrollHeight;
+        }
+
+        function updateMessageDOM(msg) {
+            const msgNode = document.getElementById(`msg-${msg.id}`);
+            if (msgNode) {
+                let bodyText = msg.deleted ? `<i>${escapeHTML(msg.text)}</i>` : escapeHTML(msg.text);
+                if (msg.edited && !msg.deleted) bodyText += ` <span style="font-size:10px; opacity:0.6;">(edited)</span>`;
+                
+                const textBody = msgNode.querySelector('.text-body');
+                if (textBody) textBody.innerHTML = bodyText;
+            }
         }
 
         function updateMessageStatusDOM(id, status) {
@@ -373,9 +540,90 @@
             }
         }
 
-        function setupInputListeners() {
+        // --- CONTEXT ACTION MENU (Edit / Delete / Reply) ---
+        function openActionModal(msg) {
+            selectedMsgForMenu = msg;
+            const modal = document.getElementById('action-modal');
+            const editBtn = document.getElementById('menu-edit-btn');
+            const delBtn = document.getElementById('menu-del-btn');
+            
+            const isMine = (msg.type === 'sent');
+            const within30Secs = (Date.now() - msg.timestamp <= 30000);
+
+            if (isMine && within30Secs && !msg.deleted) {
+                editBtn.style.display = 'block';
+                delBtn.style.display = 'block';
+            } else if (isMine && !msg.deleted) {
+                editBtn.style.display = 'none';
+                delBtn.style.display = 'block'; // Can always delete own message locally/globally
+            } else {
+                editBtn.style.display = 'none';
+                delBtn.style.display = 'none';
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeActionModal(e) {
+            if (!e || e.target.id === 'action-modal') {
+                document.getElementById('action-modal').style.display = 'none';
+            }
+        }
+
+        function triggerReplyFromMenu() {
+            closeActionModal();
+            if (!selectedMsgForMenu) return;
+            replyingToId = selectedMsgForMenu.id;
+            document.getElementById('reply-text-preview').innerText = selectedMsgForMenu.text;
+            document.getElementById('reply-bar').style.display = 'flex';
+            document.getElementById('msg-input').focus();
+        }
+
+        function cancelReply() {
+            replyingToId = null;
+            document.getElementById('reply-bar').style.display = 'none';
+        }
+
+        function triggerEditFromMenu() {
+            closeActionModal();
+            if (!selectedMsgForMenu || selectedMsgForMenu.deleted) return;
+            editingMsgId = selectedMsgForMenu.id;
             const input = document.getElementById('msg-input');
-            input.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(false); });
+            input.value = selectedMsgForMenu.text;
+            input.focus();
+            // Change send button indicator context visually or keep standard
+        }
+
+        function cancelEdit() {
+            editingMsgId = null;
+            document.getElementById('msg-input').value = '';
+        }
+
+        function triggerDeleteFromMenu() {
+            closeActionModal();
+            if (!selectedMsgForMenu) return;
+            
+            selectedMsgForMenu.deleted = true;
+            selectedMsgForMenu.text = "This message was deleted";
+            updateMessageDOM(selectedMsgForMenu);
+            saveLocalHistory();
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'delete', msgId: selectedMsgForMenu.id }));
+            }
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+
+        function setupInputListeners() {
+            if (listenersSetup) return; 
+            listenersSetup = true;
+            const input = document.getElementById('msg-input');
+            input.addEventListener('keydown', (e) => { if(e.key === 'Enter') handleSendAction(); });
             input.addEventListener('input', () => {
                 if(!ws || ws.readyState !== WebSocket.OPEN) return;
                 ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: true }));
