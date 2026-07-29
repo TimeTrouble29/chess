@@ -48,7 +48,15 @@
         .dummy-btn.sent { background: #4caf50; pointer-events: none; }
 
         #chat-screen { display: none; position: relative; height: 100%; flex-direction: column; z-index: 3; background: #121212; }
-        header { padding: 15px 20px; background: #1e1e1e; border-bottom: 1px solid #2d2d2d; display: flex; justify-content: space-between; align-items: center; padding-top: max(15px, env(safe-area-inset-top)); }
+        
+        header { padding: 12px 20px; background: #1e1e1e; border-bottom: 1px solid #2d2d2d; display: flex; justify-content: space-between; align-items: center; padding-top: max(12px, env(safe-area-inset-top)); }
+        
+        /* Header Right Side Elements */
+        .header-right { display: flex; align-items: center; gap: 15px; }
+        .call-btn { background: none; border: none; color: #4caf50; font-size: 18px; cursor: pointer; padding: 5px; width: auto; display: flex; align-items: center; justify-content: center; }
+        .call-btn:active { opacity: 0.6; }
+
+        .status-container { display: flex; align-items: center; }
         .status-dot { width: 10px; height: 10px; background: #555; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .status-dot.online { background: #4caf50; }
         
@@ -87,6 +95,14 @@
         .action-sheet button { background: none; border: none; padding: 15px; color: #fff; font-size: 15px; text-align: center; border-bottom: 1px solid #333; border-radius: 0; width: 100%; }
         .action-sheet button:active { background: #333; }
         .action-sheet button.danger { color: #ff5252; }
+
+        /* Call Overlay Modal */
+        #call-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 20; flex-direction: column; justify-content: center; align-items: center; gap: 20px; }
+        #call-overlay h3 { color: #fff; font-weight: 400; font-size: 1.2rem; }
+        .call-actions { display: flex; gap: 20px; margin-top: 20px; }
+        .call-actions button { width: 60px; height: 60px; border-radius: 50%; font-size: 20px; display: flex; justify-content: center; align-items: center; border: none; cursor: pointer; }
+        .btn-accept { background: #4caf50; color: #fff; }
+        .btn-end { background: #f44336; color: #fff; }
     </style>
 </head>
 <body>
@@ -113,7 +129,14 @@
     <div id="chat-screen">
         <header>
             <span style="font-size: 16px; font-weight: 500; color: #ccc;">Private Game Node</span>
-            <div><span class="status-dot" id="status-dot"></span><span id="status-text" style="font-size: 13px; color: #888;">Offline</span></div>
+            <div class="header-right">
+                <!-- CALL BUTTON PLACED BEFORE STATUS -->
+                <button class="call-btn" onclick="startCall()" title="Voice Call">📞</button>
+                <div class="status-container">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="status-text" style="font-size: 13px; color: #888;">Offline</span>
+                </div>
+            </div>
         </header>
         <div id="messages"></div>
         <div id="typing-indicator"></div>
@@ -131,6 +154,16 @@
         </footer>
     </div>
 
+    <!-- Call Active / Ringing Overlay Modal -->
+    <div id="call-overlay">
+        <h3 id="call-status-text">Calling...</h3>
+        <div class="call-actions">
+            <button id="accept-call-btn" class="btn-accept" style="display:none;" onclick="acceptCall()">✓</button>
+            <button class="btn-end" onclick="endCall()">📞</button>
+        </div>
+        <audio id="remote-audio" autoplay></audio>
+    </div>
+
     <div id="action-modal" onclick="closeActionModal(event)">
         <div class="action-sheet" id="action-sheet-content">
             <button onclick="triggerReplyFromMenu()">Reply</button>
@@ -143,9 +176,6 @@
     <script>
         const USER_1_PASSWORD = "290624"; 
         const USER_2_PASSWORD = "160824";
-        
-        // Auto-delete disabled completely (set to 0) so messages stay permanently
-        const MESSAGE_LIFESPAN = 0; 
 
         let cryptoKey = null;
         let roomID = null;
@@ -160,6 +190,11 @@
         let replyingToId = null;
         let editingMsgId = null;
         let selectedMsgForMenu = null;
+
+        // WebRTC Call Variables
+        let pc = null;
+        let localStream = null;
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         function updateLoginBadge() {
             const badge = document.getElementById('login-badge');
@@ -180,6 +215,7 @@
         }
 
         function playNotificationSound() {
+            if (isTabActive) return; 
             if (!audioCtx) return;
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -209,7 +245,6 @@
                 messages.forEach(m => {
                     if (m.type === 'received' && m.status !== 'seen') {
                         m.status = 'seen';
-                        m.seenAt = Date.now(); 
                         saveLocalHistory();
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
                     }
@@ -220,6 +255,7 @@
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
+                isTabActive = false;
                 if (document.getElementById('chat-screen').style.display === 'flex') {
                     document.getElementById('messages').innerHTML = ''; 
                     document.getElementById('chat-screen').style.display = 'none';
@@ -231,6 +267,8 @@
                     fakeBtn.innerText = 'Send OTP';
                     fakeBtn.classList.remove('sent');
                 }
+            } else {
+                isTabActive = true;
             }
         });
 
@@ -285,6 +323,7 @@
             }
 
             initAudio(); 
+            isTabActive = true;
             await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
             await loadLocalHistory(); 
             
@@ -295,20 +334,7 @@
             unreadCount = 0;
             updateLoginBadge();
             
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                connectNetwork();
-            } else {
-                messages.forEach(m => {
-                    if (m.type === 'received' && m.status !== 'seen') {
-                        m.status = 'seen';
-                        m.seenAt = Date.now();
-                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
-                    }
-                });
-                saveLocalHistory();
-                document.getElementById('msg-input').disabled = false;
-                document.getElementById('send-btn').disabled = false;
-            }
+            connectNetwork();
             setupInputListeners();
         }
 
@@ -360,12 +386,10 @@
                             time: packet.time, status: isMsgSeen ? 'seen' : 'unread',
                             replyTo: packet.replyTo || null, timestamp: packet.timestamp || Date.now()
                         };
-                        if (isMsgSeen) {
-                            newMsg.seenAt = Date.now(); 
-                        } else {
+                        if (!isMsgSeen) {
                             unreadCount++;
                             updateLoginBadge();
-                            playNotificationSound();
+                            playNotificationSound(); 
                         }
                         messages.push(newMsg);
                         saveLocalHistory();
@@ -388,7 +412,6 @@
                     const msg = messages.find(m => m.id === packet.msgId);
                     if (msg && msg.status !== 'seen') {
                         msg.status = 'seen';
-                        msg.seenAt = Date.now(); 
                         saveLocalHistory();
                         updateMessageStatusDOM(msg.id, 'seen');
                     }
@@ -396,7 +419,118 @@
                 else if (packet.type === 'typing') {
                     document.getElementById('typing-indicator').innerText = packet.status ? "Typing..." : "";
                 }
+                // --- WebRTC Signaling Handlers ---
+                else if (packet.type === 'call-offer') {
+                    showIncomingCallOverlay(packet.offer);
+                }
+                else if (packet.type === 'call-answer') {
+                    if (pc) await pc.setRemoteDescription(new RTCSessionDescription(packet.answer));
+                    document.getElementById('call-status-text').innerText = "Connected";
+                }
+                else if (packet.type === 'ice-candidate') {
+                    if (pc && packet.candidate) {
+                        await pc.addIceCandidate(new RTCIceCandidate(packet.candidate));
+                    }
+                }
+                else if (packet.type === 'call-end') {
+                    cleanupCall();
+                }
             };
+        }
+
+        // --- WebRTC Audio Call Logic ---
+        async function startCall() {
+            document.getElementById('call-status-text').innerText = "Calling...";
+            document.getElementById('accept-call-btn').style.display = 'none';
+            document.getElementById('call-overlay').style.display = 'flex';
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                pc = new RTCPeerConnection(rtcConfig);
+                
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                
+                pc.ontrack = (event) => {
+                    document.getElementById('remote-audio').srcObject = event.streams[0];
+                };
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'ice-candidate', candidate: event.candidate }));
+                    }
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-offer', offer: offer }));
+                }
+            } catch (err) {
+                alert("Microphone permission denied or unavailable.");
+                endCall();
+            }
+        }
+
+        let pendingOffer = null;
+        function showIncomingCallOverlay(offer) {
+            pendingOffer = offer;
+            document.getElementById('call-status-text').innerText = "Incoming Call...";
+            document.getElementById('accept-call-btn').style.display = 'flex';
+            document.getElementById('call-overlay').style.display = 'flex';
+        }
+
+        async function acceptCall() {
+            document.getElementById('accept-call-btn').style.display = 'none';
+            document.getElementById('call-status-text').innerText = "Connected";
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                pc = new RTCPeerConnection(rtcConfig);
+                
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                
+                pc.ontrack = (event) => {
+                    document.getElementById('remote-audio').srcObject = event.streams[0];
+                };
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'ice-candidate', candidate: event.candidate }));
+                    }
+                };
+
+                await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-answer', answer: answer }));
+                }
+            } catch (err) {
+                endCall();
+            }
+        }
+
+        function endCall() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-end' }));
+            }
+            cleanupCall();
+        }
+
+        function cleanupCall() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            pendingOffer = null;
+            document.getElementById('call-overlay').style.display = 'none';
+            document.getElementById('remote-audio').srcObject = null;
         }
 
         function handleSendAction() {
