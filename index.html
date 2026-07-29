@@ -235,30 +235,6 @@
         unreadCount = parseInt(localStorage.getItem('global_unread_cache')) || 0;
         updateLoginBadge();
 
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        let audioCtx;
-
-        function initAudio() {
-            if (!audioCtx) audioCtx = new AudioContext();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-        }
-
-        function playNotificationSound() {
-            if (isTabActive) return; 
-            if (!audioCtx) return;
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); 
-            oscillator.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.1);
-        }
-
         function dummySendOTP() {
             const btn = document.getElementById('fake-otp-btn');
             btn.innerText = 'Sent ✓';
@@ -378,7 +354,6 @@
                 document.getElementById('pwd').value = ''; return;
             }
 
-            initAudio(); 
             isTabActive = true;
             showAllMessages = false;
             await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
@@ -453,7 +428,6 @@
                         if (!isMsgSeen) {
                             unreadCount++;
                             updateLoginBadge();
-                            playNotificationSound(); 
                         }
                         messages.push(newMsg);
                         saveLocalHistory();
@@ -490,7 +464,7 @@
                 }
                 // --- WebRTC Signaling Handlers (With Restrictive Login Checks) ---
                 else if (packet.type === 'call-offer') {
-                    // FIX: Restrict incoming call execution if the user is locked out
+                    // Restrict incoming call execution if the user is locked out
                     if (!isChatVisible) return;
                     showIncomingCallOverlay(packet.offer);
                 }
@@ -555,7 +529,7 @@
             document.getElementById('incoming-actions').style.display = 'none';
 
             try {
-                // FIX: Force a manual runtime media request trigger for WebView containers
+                // Force a manual runtime media request trigger for WebView containers
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 pc = new RTCPeerConnection(rtcConfig);
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
