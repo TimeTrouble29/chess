@@ -173,6 +173,7 @@
             <button class="btn-end" onclick="endCall()" title="Disconnect">📞</button>
         </div>
 
+        <!-- WebRTC Audio Output -->
         <audio id="remote-audio" autoplay></audio>
     </div>
 
@@ -439,9 +440,14 @@
                 }
                 else if (packet.type === 'call-answer') {
                     if (pc) await pc.setRemoteDescription(new RTCSessionDescription(packet.answer));
+                    
+                    // CALLER SIDE: Connected, show active buttons
                     document.getElementById('call-status-text').innerText = "Connected";
                     document.getElementById('incoming-actions').style.display = 'none';
                     document.getElementById('active-actions').style.display = 'flex';
+                    
+                    // Trigger Default Earpiece Check on Connection
+                    setDefaultAudioOutput(); 
                 }
                 else if (packet.type === 'ice-candidate') {
                     if (pc && packet.candidate) {
@@ -458,12 +464,13 @@
         
         async function startCall() {
             document.getElementById('call-status-text').innerText = "Calling...";
+            
+            // Show Active Action buttons instantly for the Caller so they can Hang Up
             document.getElementById('incoming-actions').style.display = 'none';
             document.getElementById('active-actions').style.display = 'flex';
             document.getElementById('call-overlay').style.display = 'flex';
 
             try {
-                // Request mic (advanced constraint hints OS to use earpiece/voice routing)
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: { echoCancellation: true, noiseSuppression: true } 
                 });
@@ -496,6 +503,8 @@
         function showIncomingCallOverlay(offer) {
             pendingOffer = offer;
             document.getElementById('call-status-text').innerText = "Incoming Call...";
+            
+            // Show Accept/Reject buttons for Receiver
             document.getElementById('incoming-actions').style.display = 'flex';
             document.getElementById('active-actions').style.display = 'none';
             document.getElementById('call-overlay').style.display = 'flex';
@@ -531,30 +540,74 @@
                     ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-answer', answer: answer }));
                 }
                 
+                // RECEIVER SIDE: Connected, show active buttons
                 document.getElementById('call-status-text').innerText = "Connected";
+                document.getElementById('incoming-actions').style.display = 'none';
                 document.getElementById('active-actions').style.display = 'flex';
+                
+                // Trigger Default Earpiece Check on Connection
+                setDefaultAudioOutput();
+
             } catch (err) {
                 endCall();
             }
         }
 
-        function toggleSpeaker() {
+        // Helper function to force Earpiece Default on compatible Androids/Desktops
+        async function setDefaultAudioOutput() {
+            isSpeakerOn = false;
+            document.getElementById('speaker-btn').classList.remove('active');
+            
+            const audioElem = document.getElementById('remote-audio');
+            if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return; // Browser doesn't support manual routing
+
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
+                
+                // Find earpiece/handset if exposed by the browser
+                const earpiece = audioOutputs.find(d => 
+                    d.label.toLowerCase().includes('earpiece') || 
+                    d.label.toLowerCase().includes('handset')
+                );
+                
+                if (earpiece) {
+                    await audioElem.setSinkId(earpiece.deviceId);
+                } else {
+                    await audioElem.setSinkId('default'); // Usually defaults to earpiece on strict communication profiles
+                }
+            } catch (err) { console.log("Audio routing blocked by browser."); }
+        }
+
+        async function toggleSpeaker() {
             isSpeakerOn = !isSpeakerOn;
             const audioElem = document.getElementById('remote-audio');
             const btn = document.getElementById('speaker-btn');
             
-            // Note: True hardware speaker/earpiece routing via JS is heavily restricted by iOS/Android web browsers.
-            // setSinkId works on some desktop browsers, but mobile OS often handles it automatically.
-            if (audioElem.setSinkId) {
-                // If the browser supports manually changing the audio output device, we can attempt it here
-                // audioElem.setSinkId(isSpeakerOn ? 'speaker_device_id' : 'earpiece_device_id');
-            }
+            // Visually toggle button
+            if (isSpeakerOn) btn.classList.add('active');
+            else btn.classList.remove('active');
             
-            if (isSpeakerOn) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
+            // Attempt to route hardware audio if browser permits
+            if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return;
+
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
+
+                if (isSpeakerOn) {
+                    const speaker = audioOutputs.find(d => d.label.toLowerCase().includes('speaker'));
+                    if (speaker) await audioElem.setSinkId(speaker.deviceId);
+                    else await audioElem.setSinkId(audioOutputs[0]?.deviceId || '');
+                } else {
+                    const earpiece = audioOutputs.find(d => 
+                        d.label.toLowerCase().includes('earpiece') || 
+                        d.label.toLowerCase().includes('handset')
+                    );
+                    if (earpiece) await audioElem.setSinkId(earpiece.deviceId);
+                    else await audioElem.setSinkId('default'); 
+                }
+            } catch (err) { console.log("Audio routing blocked by browser."); }
         }
 
         function endCall() {
