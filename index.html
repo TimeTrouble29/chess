@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Start Online Game</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body, html { height: 100%; background-color: #121212; color: #e0e0e0; overflow: hidden; }
+        
+        .chessboard-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #8ca2c7;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="%238ca2c7"/><path d="M0,0 H50 V50 H0 Z M100,0 H150 V50 H100 Z M200,0 H250 V50 H200 Z M300,0 H350 V50 H300 Z M50,50 H100 V100 H50 Z M150,50 H200 V100 H150 Z M250,50 H300 V100 H250 Z M350,50 H400 V100 H350 Z M0,100 H50 V150 H0 Z M100,100 H150 V150 H100 Z M200,100 H250 V150 H200 Z M300,100 H350 V150 H300 Z M50,150 H100 V200 H50 Z M150,150 H200 V200 H150 Z M250,150 H300 V200 H250 Z M350,150 H400 V200 H350 Z M0,200 H50 V250 H0 Z M100,200 H150 V250 H100 Z M200,200 H250 V250 H200 Z M300,200 H350 V250 H300 Z M50,250 H100 V300 H50 Z M150,250 H200 V300 H150 Z M250,250 H300 V300 H250 Z M350,250 H400 V300 H350 Z M0,300 H50 V350 H0 Z M100,300 H150 V350 H100 Z M200,300 H250 V350 H200 Z M300,300 H350 V350 H300 Z M50,350 H100 V400 H50 Z M150,350 H200 V400 H150 Z M250,350 H300 V400 H250 Z M350,350 H400 V400 H350 Z" fill="%23e4e7ed"/><g font-size="38" font-family="Arial" text-anchor="middle" dominant-baseline="central"><text x="25" y="25" fill="%23000">♜</text><text x="75" y="25" fill="%23000">♞</text><text x="125" y="25" fill="%23000">♝</text><text x="175" y="25" fill="%23000">♛</text><text x="225" y="25" fill="%23000">♚</text><text x="275" y="25" fill="%23000">♝</text><text x="325" y="25" fill="%23000">♞</text><text x="375" y="25" fill="%23000">♜</text><text x="25" y="75" fill="%23000">♟</text><text x="75" y="75" fill="%23000">♟</text><text x="125" y="75" fill="%23000">♟</text><text x="175" y="75" fill="%23000">♟</text><text x="225" y="75" fill="%23000">♟</text><text x="275" y="75" fill="%23000">♟</text><text x="325" y="75" fill="%23000">♟</text><text x="375" y="75" fill="%23000">♟</text><text x="25" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="75" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="125" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="175" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="225" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="275" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="325" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="375" y="325" fill="%23fff" stroke="%23000" stroke-width="1">♙</text><text x="25" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♖</text><text x="75" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♘</text><text x="125" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♗</text><text x="175" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♕</text><text x="225" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♔</text><text x="275" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♗</text><text x="325" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♘</text><text x="375" y="375" fill="%23fff" stroke="%23000" stroke-width="1">♖</text></g></svg>');
+            background-size: 100vw; background-position: top center; background-repeat: repeat; filter: blur(3px); transform: scale(1.1); z-index: 1; transition: opacity 0.5s ease;
+        }
+
+        .bg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1; }
+
+        #lock-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2; padding: 20px;
+        }
+        .login-box {
+            background: rgba(25, 25, 25, 0.95); backdrop-filter: blur(15px); padding: 35px 25px; border-radius: 20px; width: 100%; max-width: 380px; box-shadow: 0 15px 40px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.15); text-align: center;
+        }
+        .login-box h2 { margin-bottom: 25px; font-weight: 500; font-size: 1.3rem; color: #fff; }
+        input { width: 100%; padding: 16px; margin-bottom: 15px; border: 1px solid #444; border-radius: 12px; background: #1e1e1e; color: #fff; font-size: 16px; outline: none; -webkit-appearance: none; }
+        input:focus { border-color: #2979ff; }
+        button { width: 100%; padding: 16px; border: none; border-radius: 12px; background: #2979ff; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; -webkit-appearance: none; }
+        button:active { background: #1c54b2; }
+
+        #chat-screen { display: none; position: relative; height: 100%; flex-direction: column; z-index: 3; background: #121212; }
+        header { padding: 15px 20px; background: #1e1e1e; border-bottom: 1px solid #2d2d2d; display: flex; justify-content: space-between; align-items: center; padding-top: max(15px, env(safe-area-inset-top)); }
+        .status-dot { width: 10px; height: 10px; background: #555; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .status-dot.online { background: #4caf50; }
+        
+        #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+        .msg { max-width: 80%; padding: 12px 16px; border-radius: 18px; font-size: 16px; word-break: break-word; position: relative; }
+        .msg.sent { background: #2979ff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg.received { background: #2e2e2e; color: #e0e0e0; align-self: flex-start; border-bottom-left-radius: 4px; }
+        
+        .meta-info { font-size: 11px; margin-top: 5px; display: flex; justify-content: flex-end; gap: 5px; color: rgba(255,255,255,0.5); }
+        .status-tick { color: #ccc; margin-left: 2px; font-weight: bold; }
+        .status-tick.seen { color: #4caf50; }
+        #typing-indicator { padding: 5px 15px; font-size: 13px; color: #888; height: 25px; font-style: italic; }
+
+        footer { padding: 10px 15px; background: #1e1e1e; display: flex; gap: 10px; border-top: 1px solid #2d2d2d; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+        footer input { margin-bottom: 0; flex: 1; border-radius: 20px; padding: 12px 16px; }
+        footer button { width: auto; padding: 0 24px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="chessboard-bg" id="bg"><div class="bg-overlay"></div></div>
+
+    <div id="lock-screen">
+        <div class="login-box">
+            <h2>Enter OTP</h2>
+            <input type="password" id="pwd" placeholder="Enter OTP" autocomplete="off">
+            <button onclick="initializeSession()">Start Online Game</button>
+        </div>
+    </div>
+
+    <div id="chat-screen">
+        <header>
+            <span style="font-size: 16px; font-weight: 500; color: #ccc;">Private Game Node</span>
+            <div><span class="status-dot" id="status-dot"></span><span id="status-text" style="font-size: 13px; color: #888;">Offline</span></div>
+        </header>
+        <div id="messages"></div>
+        <div id="typing-indicator"></div>
+        <footer>
+            <input type="text" id="msg-input" placeholder="Message..." autocomplete="off" disabled>
+            <button id="send-btn" onclick="sendMessage(false)" disabled>Send</button>
+        </footer>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. HARDCODED PRE-FIXED PASSWORDS (USED AS OTPs)
+        // ==========================================
+        const USER_1_PASSWORD = "5125"; 
+        const USER_2_PASSWORD = "9121";
+        // ==========================================
+
+        let cryptoKey = null;
+        let roomID = null;
+        let ws = null;
+        let myID = Math.random().toString(36).substring(2, 10);
+        let typingTimeout = null;
+        let isTabActive = true;
+        let messages = []; // Array holding the persistent chat history
+
+        window.onfocus = () => { 
+            isTabActive = true; 
+            // When user returns, push seen receipts for any unconfirmed received messages
+            if(ws && ws.readyState === WebSocket.OPEN) {
+                messages.forEach(m => {
+                    if (m.type === 'received') ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
+                });
+            }
+        };
+        window.onblur = () => { isTabActive = false; };
+
+        // --- STRICT APP LOCK / SCREEN LOCK LOGIC ---
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                if (document.getElementById('chat-screen').style.display === 'flex') {
+                    document.getElementById('messages').innerHTML = ''; // Hide UI text
+                    document.getElementById('chat-screen').style.display = 'none';
+                    document.getElementById('bg').style.display = 'block';
+                    document.getElementById('lock-screen').style.display = 'flex';
+                    document.getElementById('pwd').value = ''; 
+                    if (ws) { ws.close(); ws = null; }
+                }
+            }
+        });
+
+        // 2. Encryption Engine
+        async function deriveKey(p1, p2) {
+            const combined = [p1, p2].sort().join('::');
+            const data = new TextEncoder().encode(combined);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            roomID = Array.from(new Uint8Array(hashBuffer)).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+            cryptoKey = await crypto.subtle.importKey('raw', hashBuffer, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        }
+
+        async function encryptData(text) {
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, new TextEncoder().encode(text));
+            return { ciphertext: btoa(String.fromCharCode(...new Uint8Array(encrypted))), iv: btoa(String.fromCharCode(...iv)) };
+        }
+
+        async function decryptData(ciphertextB64, ivB64) {
+            try {
+                const iv = new Uint8Array(atob(ivB64).split('').map(c => c.charCodeAt(0)));
+                const ciphertext = new Uint8Array(atob(ciphertextB64).split('').map(c => c.charCodeAt(0)));
+                const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, ciphertext);
+                return new TextDecoder().decode(decrypted);
+            } catch (e) { return "[Error: Invalid Match]"; }
+        }
+
+        // 3. SECURE OFFLINE STORAGE (Encrypted Locally)
+        async function saveLocalHistory() {
+            const dataStr = JSON.stringify(messages);
+            const encrypted = await encryptData(dataStr);
+            localStorage.setItem('chat_hist_' + roomID, JSON.stringify(encrypted));
+        }
+
+        async function loadLocalHistory() {
+            const stored = localStorage.getItem('chat_hist_' + roomID);
+            messages = [];
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    const decryptedStr = await decryptData(parsed.ciphertext, parsed.iv);
+                    messages = JSON.parse(decryptedStr);
+                } catch(e) { console.error("Decryption failed."); }
+            }
+            document.getElementById('messages').innerHTML = ''; // clear UI
+            messages.forEach(msg => appendMessageDOM(msg));
+        }
+
+        // 4. Session Initialization
+        async function initializeSession() {
+            const enteredPassword = document.getElementById('pwd').value;
+            if (enteredPassword !== USER_1_PASSWORD && enteredPassword !== USER_2_PASSWORD) {
+                alert("Access Denied: Incorrect OTP.");
+                document.getElementById('pwd').value = ''; return;
+            }
+
+            await deriveKey(USER_1_PASSWORD, USER_2_PASSWORD);
+            await loadLocalHistory(); // Restore waiting messages securely
+            
+            document.getElementById('lock-screen').style.display = 'none';
+            document.getElementById('bg').style.display = 'none';
+            document.getElementById('chat-screen').style.display = 'flex';
+            connectNetwork();
+            setupInputListeners();
+        }
+
+        // 5. Network & Auto-Sync Engine
+        function connectNetwork() {
+            // ---> PASTE YOUR PIESOCKET URL HERE <---
+            const pieSocketURL = 'wss://free.blr2.piesocket.com/v3/1?api_key=W028guWx83kfU37EXPvD3WnXTEQYukFgU4V7JGkj&notify_self=1';
+            
+            ws = new WebSocket(pieSocketURL);
+
+            ws.onopen = () => {
+                document.getElementById('status-dot').className = 'status-dot online';
+                document.getElementById('status-text').innerText = 'Game Node Online';
+                document.getElementById('msg-input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                
+                // Broadcast presence to trigger unread message sync
+                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'hello' }));
+                setInterval(() => { if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ping: true})); }, 30000);
+            };
+
+            ws.onclose = () => {
+                document.getElementById('status-dot').className = 'status-dot';
+                document.getElementById('status-text').innerText = 'Offline';
+            };
+
+            ws.onmessage = async (e) => {
+                const packet = JSON.parse(e.data);
+                if (packet.ping || packet.sender === myID || packet.room !== roomID) return;
+
+                if (packet.type === 'hello') {
+                    // When the other user comes online, automatically fire all waiting unread messages to them
+                    messages.forEach(m => {
+                        if (m.type === 'sent' && m.status !== 'seen') {
+                            sendMessage(true, m); // Resend silently
+                        } else if (m.type === 'received') {
+                            // Let them know we've seen their messages in case the receipt dropped
+                            ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: m.id }));
+                        }
+                    });
+                } 
+                else if (packet.type === 'chat') {
+                    const exists = messages.find(m => m.id === packet.msgId);
+                    if (!exists) {
+                        const decryptedText = await decryptData(packet.payload, packet.iv);
+                        const newMsg = { id: packet.msgId, text: decryptedText, type: 'received', time: packet.time };
+                        messages.push(newMsg);
+                        saveLocalHistory();
+                        appendMessageDOM(newMsg);
+                    }
+                    if(isTabActive) {
+                        ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'seen', msgId: packet.msgId }));
+                    }
+                } 
+                else if (packet.type === 'seen') {
+                    const msg = messages.find(m => m.id === packet.msgId);
+                    if (msg && msg.status !== 'seen') {
+                        msg.status = 'seen';
+                        saveLocalHistory();
+                        updateMessageStatusDOM(msg.id, 'seen');
+                    }
+                }
+                else if (packet.type === 'typing') {
+                    document.getElementById('typing-indicator').innerText = packet.status ? "Typing..." : "";
+                }
+            };
+        }
+
+        // 6. Messaging Functions
+        async function sendMessage(isResend = false, existingMsgObj = null) {
+            let msgObj;
+            if (!isResend) {
+                const input = document.getElementById('msg-input');
+                const text = input.value.trim();
+                if(!text) return;
+                input.value = '';
+                
+                // Create and save message locally to Wait Room
+                const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                msgObj = { id: Date.now().toString() + Math.floor(Math.random()*1000), text: text, type: 'sent', status: 'sent', time: timeStr };
+                messages.push(msgObj);
+                saveLocalHistory();
+                appendMessageDOM(msgObj);
+            } else {
+                msgObj = existingMsgObj; // Retrying an old message
+            }
+
+            const encrypted = await encryptData(msgObj.text);
+            const payload = { room: roomID, sender: myID, type: 'chat', msgId: msgObj.id, payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time };
+
+            if(ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(payload));
+                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
+            }
+        }
+
+        function appendMessageDOM(msg) {
+            const container = document.getElementById('messages');
+            const msgNode = document.createElement('div');
+            msgNode.className = `msg ${msg.type}`;
+            msgNode.id = `msg-${msg.id}`; // Add ID for updating ticks later
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = msg.text;
+            msgNode.appendChild(textSpan);
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'meta-info';
+            
+            let tick = '';
+            if (msg.type === 'sent') {
+                tick = msg.status === 'seen' ? '<span class="status-tick seen">✓✓</span>' : '<span class="status-tick">✓</span>';
+            }
+            
+            metaDiv.innerHTML = `<span>${msg.time}</span>${tick}`;
+            msgNode.appendChild(metaDiv);
+            container.appendChild(msgNode);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateMessageStatusDOM(id, status) {
+            const msgNode = document.getElementById(`msg-${id}`);
+            if (msgNode) {
+                const tick = msgNode.querySelector('.status-tick');
+                if (tick) {
+                    tick.innerText = '✓✓';
+                    tick.className = 'status-tick seen';
+                }
+            }
+        }
+
+        function setupInputListeners() {
+            const input = document.getElementById('msg-input');
+            input.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(false); });
+            input.addEventListener('input', () => {
+                if(!ws || ws.readyState !== WebSocket.OPEN) return;
+                ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: true }));
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false })), 2000);
+            });
+        }
+    </script>
+</body>
+</html>
