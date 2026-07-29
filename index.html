@@ -219,14 +219,20 @@
         let pendingOffer = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
+        // Persistent Blue Dot Memory Update
         function updateLoginBadge() {
             const badge = document.getElementById('login-badge');
             if (unreadCount > 0) {
                 badge.innerText = unreadCount;
+                localStorage.setItem('global_unread_cache', unreadCount); // Save to local storage memory
             } else {
                 badge.innerText = ''; 
+                localStorage.setItem('global_unread_cache', 0);
             }
         }
+
+        // Instantly parse memory on app startup to show blue dot before login
+        unreadCount = parseInt(localStorage.getItem('global_unread_cache')) || 0;
         updateLoginBadge();
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -385,7 +391,6 @@
             unreadCount = 0;
             updateLoginBadge();
             
-            // FIX 1: Disconnect old ghosts so you don't get duplicates when unlocking!
             if (ws) {
                 ws.close();
                 ws = null;
@@ -416,6 +421,8 @@
                 const packet = JSON.parse(e.data);
                 if (packet.ping || packet.sender === myID || packet.room !== roomID) return;
 
+                const isChatVisible = document.getElementById('chat-screen').style.display === 'flex';
+
                 if (packet.type === 'hello') {
                     messages.forEach(m => {
                         if (m.type === 'sent' && m.status !== 'seen' && !m.deleted) {
@@ -427,15 +434,10 @@
                 } 
                 else if (packet.type === 'chat') {
                     const decryptedText = await decryptData(packet.payload, packet.iv);
-                    
-                    // FIX 2: Check for existing AFTER decryption to stop split-second race conditions
                     let existing = messages.find(m => m.id === packet.msgId);
-                    
-                    const isChatVisible = document.getElementById('chat-screen').style.display === 'flex';
                     const isMsgSeen = isTabActive && isChatVisible;
 
                     if (existing) {
-                        // Strict check to ensure it was actually an intentional edit
                         if (packet.isEdit) {
                             existing.text = decryptedText;
                             existing.edited = true;
@@ -456,7 +458,6 @@
                         messages.push(newMsg);
                         saveLocalHistory();
                         
-                        // Prevent UI clutter if today filter is on
                         const today = new Date();
                         today.setHours(0,0,0,0);
                         if (showAllMessages || newMsg.timestamp >= today.getTime()) {
@@ -487,17 +488,18 @@
                 else if (packet.type === 'typing') {
                     document.getElementById('typing-indicator').innerText = packet.status ? "Typing..." : "";
                 }
-                // --- WebRTC Signaling Handlers ---
+                // --- WebRTC Signaling Handlers (With Restrictive Login Checks) ---
                 else if (packet.type === 'call-offer') {
+                    // FIX: Restrict incoming call execution if the user is locked out
+                    if (!isChatVisible) return;
                     showIncomingCallOverlay(packet.offer);
                 }
                 else if (packet.type === 'call-answer') {
+                    if (!isChatVisible) return;
                     if (pc) await pc.setRemoteDescription(new RTCSessionDescription(packet.answer));
-                    
                     document.getElementById('call-status-text').innerText = "Connected";
                     document.getElementById('incoming-actions').style.display = 'none';
                     document.getElementById('active-actions').style.display = 'flex';
-                    
                     setDefaultAudioOutput(); 
                 }
                 else if (packet.type === 'ice-candidate') {
@@ -515,37 +517,27 @@
         
         async function startCall() {
             document.getElementById('call-status-text').innerText = "Calling...";
-            
             document.getElementById('incoming-actions').style.display = 'none';
             document.getElementById('active-actions').style.display = 'flex';
             document.getElementById('call-overlay').style.display = 'flex';
 
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true } 
-                });
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 pc = new RTCPeerConnection(rtcConfig);
-                
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-                
-                pc.ontrack = (event) => {
-                    document.getElementById('remote-audio').srcObject = event.streams[0];
-                };
-                
+                pc.ontrack = (event) => { document.getElementById('remote-audio').srcObject = event.streams[0]; };
                 pc.onicecandidate = (event) => {
                     if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'ice-candidate', candidate: event.candidate }));
                     }
                 };
-
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
-
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-offer', offer: offer }));
                 }
             } catch (err) {
-                alert("Microphone permission denied.");
+                alert("Microphone configuration required inside app wrapper settings.");
                 endCall();
             }
         }
@@ -553,7 +545,6 @@
         function showIncomingCallOverlay(offer) {
             pendingOffer = offer;
             document.getElementById('call-status-text').innerText = "Incoming Call...";
-            
             document.getElementById('incoming-actions').style.display = 'flex';
             document.getElementById('active-actions').style.display = 'none';
             document.getElementById('call-overlay').style.display = 'flex';
@@ -564,38 +555,27 @@
             document.getElementById('incoming-actions').style.display = 'none';
 
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true } 
-                });
+                // FIX: Force a manual runtime media request trigger for WebView containers
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 pc = new RTCPeerConnection(rtcConfig);
-                
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-                
-                pc.ontrack = (event) => {
-                    document.getElementById('remote-audio').srcObject = event.streams[0];
-                };
-                
+                pc.ontrack = (event) => { document.getElementById('remote-audio').srcObject = event.streams[0]; };
                 pc.onicecandidate = (event) => {
                     if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'ice-candidate', candidate: event.candidate }));
                     }
                 };
-
                 await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'call-answer', answer: answer }));
                 }
-                
                 document.getElementById('call-status-text').innerText = "Connected";
-                document.getElementById('incoming-actions').style.display = 'none';
                 document.getElementById('active-actions').style.display = 'flex';
-                
                 setDefaultAudioOutput();
-
             } catch (err) {
+                alert("Microphone hardware connection blocked by system wrapper configuration.");
                 endCall();
             }
         }
@@ -606,69 +586,46 @@
             if (audioTrack) {
                 isMuted = !isMuted;
                 audioTrack.enabled = !isMuted;
-                
                 const btn = document.getElementById('mute-btn');
-                if (isMuted) {
-                    btn.classList.add('active');
-                    btn.innerText = '🔇';
-                } else {
-                    btn.classList.remove('active');
-                    btn.innerText = '🎤';
-                }
+                if (isMuted) { btn.classList.add('active'); btn.innerText = '🔇'; }
+                else { btn.classList.remove('active'); btn.innerText = '🎤'; }
             }
         }
 
         async function setDefaultAudioOutput() {
             isSpeakerOn = false;
             document.getElementById('speaker-btn').classList.remove('active');
-            
             const audioElem = document.getElementById('remote-audio');
             if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return; 
-
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
-                
-                const earpiece = audioOutputs.find(d => 
-                    d.label.toLowerCase().includes('earpiece') || 
-                    d.label.toLowerCase().includes('handset')
-                );
-                
-                if (earpiece) {
-                    await audioElem.setSinkId(earpiece.deviceId);
-                } else {
-                    await audioElem.setSinkId('default'); 
-                }
-            } catch (err) { console.log("Audio routing blocked by browser."); }
+                const earpiece = audioOutputs.find(d => d.label.toLowerCase().includes('earpiece') || d.label.toLowerCase().includes('handset'));
+                if (earpiece) await audioElem.setSinkId(earpiece.deviceId);
+                else await audioElem.setSinkId('default'); 
+            } catch (err) {}
         }
 
         async function toggleSpeaker() {
             isSpeakerOn = !isSpeakerOn;
             const audioElem = document.getElementById('remote-audio');
             const btn = document.getElementById('speaker-btn');
-            
             if (isSpeakerOn) btn.classList.add('active');
             else btn.classList.remove('active');
-            
             if (!audioElem.setSinkId || !navigator.mediaDevices.enumerateDevices) return;
-
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
-
                 if (isSpeakerOn) {
                     const speaker = audioOutputs.find(d => d.label.toLowerCase().includes('speaker'));
                     if (speaker) await audioElem.setSinkId(speaker.deviceId);
                     else await audioElem.setSinkId(audioOutputs[0]?.deviceId || '');
                 } else {
-                    const earpiece = audioOutputs.find(d => 
-                        d.label.toLowerCase().includes('earpiece') || 
-                        d.label.toLowerCase().includes('handset')
-                    );
+                    const earpiece = audioOutputs.find(d => d.label.toLowerCase().includes('earpiece') || d.label.toLowerCase().includes('handset'));
                     if (earpiece) await audioElem.setSinkId(earpiece.deviceId);
                     else await audioElem.setSinkId('default'); 
                 }
-            } catch (err) { console.log("Audio routing blocked by browser."); }
+            } catch (err) {}
         }
 
         function endCall() {
@@ -679,24 +636,15 @@
         }
 
         function cleanupCall() {
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-            if (pc) {
-                pc.close();
-                pc = null;
-            }
+            if (localStream) { localStream.getTracks().forEach(track => track.stop()); localStream = null; }
+            if (pc) { pc.close(); pc = null; }
             pendingOffer = null;
-            
             isSpeakerOn = false;
             document.getElementById('speaker-btn').classList.remove('active');
-            
             isMuted = false;
             const muteBtn = document.getElementById('mute-btn');
             muteBtn.classList.remove('active');
             muteBtn.innerText = '🎤';
-            
             document.getElementById('call-overlay').style.display = 'none';
             document.getElementById('remote-audio').srcObject = null;
         }
@@ -705,10 +653,8 @@
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
             if(!text) return;
-            
             input.value = ''; 
             input.focus(); 
-
             if (editingMsgId) {
                 let msgObj = messages.find(m => m.id === editingMsgId);
                 if (msgObj) {
@@ -740,8 +686,7 @@
             const payload = { 
                 room: roomID, sender: myID, type: type, msgId: msgObj.id, 
                 payload: encrypted.ciphertext, iv: encrypted.iv, time: msgObj.time,
-                replyTo: msgObj.replyTo, timestamp: msgObj.timestamp,
-                isEdit: msgObj.edited || false
+                replyTo: msgObj.replyTo, timestamp: msgObj.timestamp, isEdit: msgObj.edited || false
             };
             ws.send(JSON.stringify(payload));
             ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'typing', status: false }));
@@ -760,7 +705,7 @@
                 isLongPress = false;
                 pressTimer = setTimeout(() => {
                     isLongPress = true;
-                    msgNode.classList.toggle('show-time'); // Long press toggles time
+                    msgNode.classList.toggle('show-time'); 
                 }, 500); 
             };
             const endPress = () => clearTimeout(pressTimer);
@@ -771,11 +716,10 @@
             msgNode.onmouseup = endPress;
 
             msgNode.onclick = () => {
-                if (!isLongPress) openActionModal(msg); // Single click opens menu
+                if (!isLongPress) openActionModal(msg); 
             };
 
             let innerHTML = '';
-            
             if (msg.replyTo) {
                 let parentMsg = messages.find(m => m.id === msg.replyTo);
                 let previewText = parentMsg ? parentMsg.text : "Original message";
@@ -810,7 +754,6 @@
             if (msgNode) {
                 let bodyText = msg.deleted ? `<i>${escapeHTML(msg.text)}</i>` : escapeHTML(msg.text);
                 if (msg.edited && !msg.deleted) bodyText += ` <span style="font-size:10px; opacity:0.6;">(edited)</span>`;
-                
                 const textBody = msgNode.querySelector('.text-body');
                 if (textBody) textBody.innerHTML = bodyText;
             }
@@ -820,17 +763,13 @@
             const msgNode = document.getElementById(`msg-${id}`);
             if (msgNode) {
                 const tick = msgNode.querySelector('.status-tick');
-                if (tick) {
-                    tick.innerText = '✓✓';
-                    tick.className = 'status-tick seen';
-                }
+                if (tick) { tick.innerText = '✓✓'; tick.className = 'status-tick seen'; }
             }
         }
 
         function openActionModal(msg) {
             selectedMsgForMenu = msg;
             const modal = document.getElementById('action-modal');
-            
             const replyBtn = document.getElementById('menu-reply-btn');
             const editBtn = document.getElementById('menu-edit-btn');
             const delBtn = document.getElementById('menu-del-btn');
@@ -851,7 +790,6 @@
                 editBtn.style.display = 'none';
                 delBtn.style.display = 'none';
             }
-
             modal.style.display = 'flex';
         }
 
@@ -892,21 +830,17 @@
         function triggerDeleteFromMenu() {
             closeActionModal();
             if (!selectedMsgForMenu) return;
-            
             selectedMsgForMenu.deleted = true;
             selectedMsgForMenu.text = "This message was deleted";
             updateMessageDOM(selectedMsgForMenu);
             saveLocalHistory();
-
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ room: roomID, sender: myID, type: 'delete', msgId: selectedMsgForMenu.id }));
             }
         }
 
         function escapeHTML(str) {
-            return str.replace(/[&<>'"]/g, 
-                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-            );
+            return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
         }
 
         function setupInputListeners() {
